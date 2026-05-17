@@ -3,3 +3,4 @@ ControlPort 127.0.0.1:9051
 CookieAuthentication 0
 Log notice stdout
 DataDirectory /tmp/tor
+AvoidDiskWrites 1

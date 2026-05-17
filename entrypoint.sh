@@ -1,15 +1,38 @@
 #!/bin/bash
+set -e
 
-# Start Tor in the background
-tor -f /app/torrc &
+# Clear Tor cache to avoid "Disk quota exceeded" on start
+echo "[start.sh] Cleaning up Tor data directory..."
+rm -rf /tmp/tor
+mkdir -p /tmp/tor
 
-# Wait for Tor to be ready (look for "Bootstrapped 100%")
-echo "Waiting for Tor to bootstrap..."
-until curl -k --socks5-hostname 127.0.0.1:9050 -s https://check.torproject.org/ | grep -q "Congratulations"; do
-  sleep 2
+# Start Tor with the project torrc (DataDirectory is set in torrc)
+echo "[start.sh] Starting Tor..."
+tor -f "$(pwd)/torrc" &
+TOR_PID=$!
+
+# Wait for Tor SOCKS proxy to be ready (port 9050)
+echo "[start.sh] Waiting for Tor to bootstrap..."
+for i in $(seq 1 30); do
+    if bash -c "echo > /dev/tcp/127.0.0.1/9050" 2>/dev/null; then
+        echo "[start.sh] Tor SOCKS proxy is up on port 9050."
+        break
+    fi
+    echo "[start.sh] Attempt $i/30 - waiting..."
+    sleep 2
 done
 
-echo "Tor is ready! Starting Bot..."
+# Export Chromium path for Puppeteer
+export PUPPETEER_EXECUTABLE_PATH=$(which chromium)
+export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Start the Node.js bot
+echo "[start.sh] Using Chromium at: $PUPPETEER_EXECUTABLE_PATH"
+echo "[start.sh] Starting bot..."
+
+# Run the bot
 npm start
+
+# Cleanup on exit
+echo "[start.sh] Stopping Tor and cleaning up files..."
+kill $TOR_PID 2>/dev/null || true
+rm -rf /tmp/tor
